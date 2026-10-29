@@ -1,0 +1,1 @@
+["cmd.exe", "/d", "/c", "Isora.cmd", "-p", "{port}", "-f", "{filename}", "-c", "{cookie}"]

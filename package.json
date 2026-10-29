@@ -1,0 +1,57 @@
+{
+  "name": "isora",
+  "productName": "Isora",
+  "version": "0.11.0",
+  "private": true,
+  "description": "Isora: Habbo Flash/Nitro tools for G-Earth",
+  "keywords": [],
+  "license": "MIT",
+  "author": {
+    "name": "Maito-"
+  },
+  "main": ".vite/build/main.cjs",
+  "scripts": {
+    "start": "electron-forge start",
+    "package": "electron-forge package",
+    "make": "electron-forge make",
+    "release": "electron-forge release",
+    "lint": "oxlint && oxfmt --check",
+    "lint:fix": "oxlint --fix && oxfmt --write",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test tests/*.test.ts",
+    "test:ui": "node tests/ui-smoke.mjs",
+    "test:package": "node tests/package-smoke.mjs",
+    "test:catalog-simulation": "tsx tests/catalog-simulation.mts",
+    "screenshot": "node scripts/screenshot.mjs",
+    "test:extension": "tsx tests/extension-launch.mts",
+    "test:extension-ui": "tsx tests/extension-window.mts"
+  },
+  "devDependencies": {
+    "@electron-forge/cli": "^8.0.1",
+    "@electron-forge/maker-deb": "^8.0.1",
+    "@electron-forge/maker-rpm": "^8.0.1",
+    "@electron-forge/maker-squirrel": "^8.0.1",
+    "@electron-forge/maker-zip": "^8.0.1",
+    "@electron-forge/plugin-auto-unpack-natives": "^8.0.1",
+    "@electron-forge/plugin-fuses": "^8.0.1",
+    "@electron-forge/plugin-vite": "^8.0.1",
+    "@electron/fuses": "^2.1.3",
+    "@playwright/test": "^1.64.1",
+    "@types/electron-squirrel-startup": "^1.0.2",
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "electron": "45.1.0",
+    "oxfmt": "^0.75.0",
+    "oxlint": "^1.90.0",
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.3",
+    "vite": "^8.3.5"
+  },
+  "dependencies": {
+    "electron-squirrel-startup": "^1.0.1",
+    "lucide-react": "^1.62.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  }
+}
