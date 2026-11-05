@@ -346,7 +346,9 @@ app.whenReady().then(() => {
       return fn(...args);
     });
   handle('isora:snapshot', () => model.state);
-  handle('isora:lookupProfile', (query) => model.profiles.lookup(query));
+  handle('isora:lookupProfile', (query) =>
+    model.profiles.lookup({ ...query, preferApi: true }),
+  );
   handle('isora:editProfileHistory', (action, key) =>
     model.profiles.edit(action, key),
   );
@@ -360,7 +362,7 @@ app.whenReady().then(() => {
         throw new Error(
           messageRef('messages.connectHabboToTheSameHotelToOpenThisProfile'),
         );
-      model.action('profile', record.profile.id);
+      model.profiles.openInGame(record);
     } else if (action === 'web' || action === 'widgets')
       await shell.openExternal(
         profileURL(record.hotel, record.profile.name, action === 'widgets'),

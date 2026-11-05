@@ -358,7 +358,9 @@ function App() {
     const record =
       previous &&
       previous.hotel === value.hotel &&
-      previous.profile.id === value.id
+      (value.id !== undefined
+        ? previous.profile.id === value.id
+        : previous.profile.name.toLowerCase() === value.name?.toLowerCase())
         ? previous
         : undefined;
     setProfileView({
@@ -368,7 +370,7 @@ function App() {
       title: value.name ?? `#${value.id}`,
     });
     window.isora
-      .lookupProfile(value)
+      .lookupProfile({ ...value, preferApi: true })
       .then((record) => {
         if (profileSequence.current === sequence)
           setProfileView({
@@ -524,7 +526,9 @@ function App() {
             target={userMenu}
             state={s}
             close={closeUserMenu}
-            openProfile={(ref) => openProfile({ hotel: ref.hotel, id: ref.id })}
+            openProfile={(ref) =>
+              openProfile({ hotel: ref.hotel, name: ref.name })
+            }
             run={(name, ref, success) =>
               void run(() => window.isora.userAction(name, ref), success)
             }
@@ -549,7 +553,7 @@ function App() {
               if (profileView.record)
                 openProfile({
                   hotel: profileView.record.hotel,
-                  id: profileView.record.profile.id,
+                  name: profileView.record.profile.name,
                 });
             }}
           />

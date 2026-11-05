@@ -9,7 +9,6 @@ A compact desktop companion for **Habbo Flash/Nitro**, built with Electron and E
 - Session controls, anti-AFK, movement options and chat filters.
 - Live chat log with search, export and automatic scrolling.
 - Room users and visitors, profile actions and local profile search history.
-- Private or limited profiles load the information supplied by the game and complete basic fields through the hotel's public API. Hidden or missing details remain unavailable; API failures preserve the partial profile.
 - Furniture names, search and a temporary local highlight to help you find an item.
 - Saved outfits and an inventory viewer.
 - Packet viewer, message map and packet composer.

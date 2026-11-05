@@ -176,10 +176,14 @@ export interface ProfileQuery {
   hotel: string;
   id?: number;
   name?: string;
+  preferApi?: boolean;
 }
 export type ProfileAction = 'game' | 'web' | 'widgets' | 'motto' | 'figure';
 export interface HabboProfile {
   id: number;
+  uniqueId?: string;
+  apiOnly?: boolean;
+  onlineKnown?: boolean;
   name: string;
   figure: string;
   motto: string;

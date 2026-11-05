@@ -3,7 +3,7 @@ import type { Model } from './model';
 import type { HabboProfile, ProfileQuery, ProfileRecord } from './shared';
 import { normalize } from './protocol/gearth';
 import { Reader, Writer, type Intercept } from './protocol/packet';
-import { PublicProfiles } from './public-profiles';
+import { PublicProfiles, type PublicProfile } from './public-profiles';
 
 const profileIn = ['extendedprofile', 'userprofile'];
 const byId = ['GetExtendedProfile', 'GetUserProfile', 'UserProfile'];
@@ -18,7 +18,7 @@ const matches = (query: ProfileQuery, profile: { id: number; name: string }) =>
   query.id !== undefined
     ? query.id === profile.id
     : query.name!.toLowerCase() === profile.name.toLowerCase();
-export const profileKey = (hotel: string, id: number) =>
+export const profileKey = (hotel: string, id: number | string) =>
   JSON.stringify([hotel.toLowerCase(), id]);
 export function parseProfile(body: Buffer): HabboProfile {
   const r = new Reader(body);
@@ -95,20 +95,31 @@ interface Pending {
   wantRelationships: boolean;
   wantPublic: boolean;
   abort: AbortController;
+  publicInfo?: PublicProfile;
+}
+interface ApiPending {
+  query: ProfileQuery;
+  abort: AbortController;
+  reject: (error: Error) => void;
 }
 export class Profiles {
   private sending = false;
   private pending?: Pending;
+  private apiPending?: ApiPending;
   private own: { query: ProfileQuery; until: number }[] = [];
   private client: { query: ProfileQuery; until: number }[] = [];
   constructor(
     private model: Model,
     private publicProfiles = new PublicProfiles(),
   ) {}
-  lookup(query: ProfileQuery): Promise<ProfileRecord> {
+  lookup(
+    query: ProfileQuery,
+    publicInfo?: PublicProfile,
+  ): Promise<ProfileRecord> {
     if (
       !query ||
       typeof query.hotel !== 'string' ||
+      (query.preferApi !== undefined && typeof query.preferApi !== 'boolean') ||
       (query.id === undefined) === (query.name === undefined) ||
       (query.id !== undefined &&
         (!Number.isInteger(query.id) ||
@@ -132,10 +143,11 @@ export class Profiles {
           messageRef('messages.connectHabboToTheSameHotelToQueryThisProfile'),
         ),
       );
-    if (this.pending)
+    if (this.pending || this.apiPending)
       return Promise.reject(
         new Error(messageRef('errors.profileQueryInProgress')),
       );
+    if (query.preferApi) return this.lookupApi(query);
     if (!this.model.earth.resolve('in', ['ExtendedProfile', 'UserProfile']))
       return Promise.reject(
         new Error(
@@ -179,6 +191,7 @@ export class Profiles {
         wantRelationships: false,
         wantPublic: false,
         abort: new AbortController(),
+        publicInfo,
       };
       this.own = this.own.filter((v) => v.until > Date.now()).slice(-19);
       this.own.push({ query: clean, until: Date.now() + 60000 });
@@ -198,6 +211,100 @@ export class Profiles {
       }
     });
   }
+  private lookupApi(query: ProfileQuery): Promise<ProfileRecord> {
+    const name =
+      query.name?.trim() ??
+      this.model.state.avatars.find((a) => a.id === query.id)?.name ??
+      this.model.state.visitors.find((v) => v.id === query.id)?.name ??
+      this.model.state.profileHistory.find(
+        (r) => r.hotel === query.hotel && r.profile.id === query.id,
+      )?.profile.name;
+    if (!name)
+      return Promise.reject(
+        new Error(messageRef('messages.enterAValidUsername')),
+      );
+    return new Promise((resolve, reject) => {
+      const active: ApiPending = {
+        query,
+        abort: new AbortController(),
+        reject,
+      };
+      this.apiPending = active;
+      void (async () => {
+        try {
+          const info = await this.publicProfiles.load(
+            query.hotel,
+            name,
+            active.abort.signal,
+          );
+          if (this.apiPending !== active) return;
+          if (info.privateProfile === false) {
+            this.apiPending = undefined;
+            resolve(
+              await this.lookup(
+                {
+                  hotel: query.hotel,
+                  ...(query.id ? { id: query.id } : { name }),
+                },
+                info,
+              ),
+            );
+            return;
+          }
+          const known =
+            this.model.state.avatars.find(
+              (a) =>
+                a.type === 1 && a.name.toLowerCase() === name.toLowerCase(),
+            ) ??
+            this.model.state.visitors.find(
+              (v) => v.name.toLowerCase() === name.toLowerCase(),
+            );
+          const id = query.id ?? known?.id ?? 0;
+          if (!id && !info.uniqueId)
+            throw new Error(messageRef('errors.invalidPublicProfile'));
+          const profile: HabboProfile = {
+            id,
+            ...(info.uniqueId ? { uniqueId: info.uniqueId } : {}),
+            apiOnly: true,
+            onlineKnown: info.online !== undefined,
+            name: info.name,
+            figure: info.figure ?? '',
+            motto: info.motto ?? '',
+            created: info.created ?? '',
+            activityPoints: info.activityPoints ?? null,
+            friends: null,
+            isFriend: false,
+            requestSent: false,
+            online: info.online ?? false,
+            lastLogin: info.lastLogin ?? -1,
+            level: info.level ?? null,
+            starGems: info.starGems ?? null,
+            groups: [],
+            badges: info.badges ?? null,
+            relationships: null,
+            limited: true,
+            ...(info.privateProfile !== undefined
+              ? { privateProfile: info.privateProfile }
+              : {}),
+          };
+          const record = this.saveProfile(profile, query.hotel);
+          this.apiPending = undefined;
+          resolve(record);
+        } catch (error) {
+          if (this.apiPending !== active && active.abort.signal.aborted) return;
+          if (this.apiPending === active) this.apiPending = undefined;
+          reject(error as Error);
+        }
+      })();
+    });
+  }
+  private failApi(message: string) {
+    const active = this.apiPending;
+    if (!active) return;
+    this.apiPending = undefined;
+    active.abort.abort();
+    active.reject(new Error(message));
+  }
   private fail(message: string) {
     if (!this.pending) return;
     const pending = this.pending;
@@ -207,6 +314,9 @@ export class Profiles {
     pending.reject(new Error(message));
   }
   sessionEnded() {
+    this.failApi(
+      messageRef('messages.theHabboConnectionChangedBeforeTheQueryFinished'),
+    );
     this.fail(
       messageRef('messages.theHabboConnectionChangedBeforeTheQueryFinished'),
     );
@@ -215,6 +325,7 @@ export class Profiles {
   }
   edit(action: 'remove' | 'clear', key?: string) {
     if (action === 'clear') {
+      this.failApi(messageRef('messages.profileQueryCanceled'));
       this.fail(messageRef('messages.profileQueryCanceled'));
       this.model.state.profileHistory = [];
     } else if (action === 'remove' && typeof key === 'string')
@@ -234,6 +345,14 @@ export class Profiles {
         messageRef('messages.thisProfileIsNoLongerInYourHistory'),
       );
     return record;
+  }
+  openInGame(record: ProfileRecord) {
+    if (record.profile.id > 0) this.model.action('profile', record.profile.id);
+    else
+      this.model.sendNames(
+        byName,
+        new Writer().string(record.profile.name).buffer(),
+      );
   }
   observeSent(packet: Pick<Intercept, 'direction' | 'header' | 'body'>) {
     if (this.sending || packet.direction !== 'out') return;
@@ -268,21 +387,23 @@ export class Profiles {
       return;
     }
     if (profileIn.includes(name)) {
-      const profile = parseProfile(packet.body);
+      const identity = new Reader(packet.body);
+      const target = { id: identity.int(), name: identity.string() };
       const own = this.own.find(
         (v) =>
           v.until > Date.now() &&
           v.query.hotel === hotel &&
-          matches(v.query, profile),
+          matches(v.query, target),
       );
       const client = this.client.find(
         (v) =>
           v.until > Date.now() &&
           v.query.hotel === hotel &&
-          matches(v.query, profile),
+          matches(v.query, target),
       );
       if (own && !client) packet.blocked = true;
       if (client) this.client = this.client.filter((v) => v !== client);
+      const profile = parseProfile(packet.body);
       const pending = this.pending;
       if (
         !pending ||
@@ -292,6 +413,8 @@ export class Profiles {
       )
         return;
       pending.profile = profile;
+      if (pending.publicInfo?.uniqueId)
+        profile.uniqueId = pending.publicInfo.uniqueId;
       clearTimeout(pending.timer);
       pending.wantPublic = profile.limited === true;
       pending.timer = setTimeout(
@@ -418,15 +541,28 @@ export class Profiles {
   private finish() {
     const pending = this.pending;
     if (!pending?.profile) return;
-    const profile = pending.profile,
-      hotel = pending.query.hotel,
-      key = profileKey(hotel, profile.id);
-    const previous = this.model.state.profileHistory.find((r) => r.key === key);
+    try {
+      const record = this.saveProfile(pending.profile, pending.query.hotel);
+      this.pending = undefined;
+      clearTimeout(pending.timer);
+      pending.abort.abort();
+      pending.resolve(record);
+    } catch (error) {
+      this.fail((error as Error).message);
+    }
+  }
+  private saveProfile(profile: HabboProfile, hotel: string): ProfileRecord {
+    const key = profileKey(hotel, profile.id || profile.uniqueId!);
+    const previous = this.model.state.profileHistory.find(
+      (r) =>
+        r.hotel === hotel &&
+        (r.key === key ||
+          (!!profile.uniqueId && r.profile.uniqueId === profile.uniqueId)),
+    );
     if (!previous && this.model.state.profileHistory.length >= 10000) {
-      this.fail(
+      throw new Error(
         messageRef('messages.historyIsFullDeleteRecordsToSaveMoreProfiles'),
       );
-      return;
     }
     const now = new Date().toISOString();
     const record: ProfileRecord = {
@@ -437,15 +573,14 @@ export class Profiles {
       count: (previous?.count ?? 0) + 1,
       profile,
     };
-    this.pending = undefined;
-    clearTimeout(pending.timer);
-    pending.abort.abort();
     this.model.state.profileHistory = [
       record,
-      ...this.model.state.profileHistory.filter((r) => r.key !== key),
+      ...this.model.state.profileHistory.filter(
+        (r) => r.key !== key && r !== previous,
+      ),
     ];
     this.model.emit('profileHistory');
     this.model.changed();
-    pending.resolve(structuredClone(record));
+    return structuredClone(record);
   }
 }

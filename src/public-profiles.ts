@@ -3,11 +3,17 @@ import { hotelDomain } from './user-actions';
 
 export interface PublicProfile {
   name: string;
+  uniqueId?: string;
   figure?: string;
   motto?: string;
   created?: string;
   activityPoints?: number;
   privateProfile?: boolean;
+  online?: boolean;
+  lastLogin?: number;
+  level?: number;
+  starGems?: number;
+  badges?: { slot: number; code: string }[];
 }
 export function publicProfileURL(hotel: string, name: string): string {
   const domain = hotelDomain(hotel);
@@ -32,6 +38,11 @@ export function parsePublicProfile(
   )
     throw new Error(messageRef('errors.invalidPublicProfile'));
   const result: PublicProfile = { name: data.name };
+  if (
+    typeof data.uniqueId === 'string' &&
+    /^hh[a-z0-9-]{1,128}$/i.test(data.uniqueId)
+  )
+    result.uniqueId = data.uniqueId;
   if (typeof data.figureString === 'string' && data.figureString.length <= 2000)
     result.figure = data.figureString;
   if (typeof data.motto === 'string' && data.motto.length <= 2000)
@@ -53,6 +64,32 @@ export function parsePublicProfile(
     result.activityPoints = data.achievementScore as number;
   if (typeof data.profileVisible === 'boolean')
     result.privateProfile = !data.profileVisible;
+  if (typeof data.online === 'boolean') result.online = data.online;
+  if (
+    typeof data.lastAccessTime === 'string' &&
+    Number.isFinite(Date.parse(data.lastAccessTime))
+  )
+    result.lastLogin = Math.max(
+      0,
+      Math.floor((Date.now() - Date.parse(data.lastAccessTime)) / 1000),
+    );
+  for (const [field, key] of [
+    ['currentLevel', 'level'],
+    ['starGemCount', 'starGems'],
+  ] as const)
+    if (Number.isSafeInteger(data[field]) && (data[field] as number) >= 0)
+      result[key] = data[field] as number;
+  if (
+    Array.isArray(data.selectedBadges) &&
+    data.selectedBadges.length <= 50 &&
+    data.selectedBadges.every(
+      (b) => b && typeof b.code === 'string' && b.code.length <= 400,
+    )
+  )
+    result.badges = data.selectedBadges.map((b, index) => ({
+      slot: index + 1,
+      code: b.code,
+    }));
   return result;
 }
 export class PublicProfiles {

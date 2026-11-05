@@ -143,7 +143,9 @@ export function ProfilePanel({
                         {record.profile.name}
                       </button>
                       <small className="profile-id muted">
-                        #{record.profile.id}
+                        {record.profile.id > 0
+                          ? `#${record.profile.id}`
+                          : record.profile.uniqueId}
                       </small>
                     </td>
                     <td className="muted">
@@ -311,23 +313,28 @@ export function ProfileDialog({
                 <div className="profile-heading">
                   <h3>{profile.name}</h3>
                   <span className={profile.online ? 'green-text' : 'muted'}>
-                    {profile.online
-                      ? t('profile.online')
-                      : t('messages.offline')}
+                    {profile.apiOnly && !profile.onlineKnown
+                      ? t('common.unavailable')
+                      : profile.online
+                        ? t('profile.online')
+                        : t('messages.offline')}
                   </span>
                 </div>
                 <p className="profile-motto">
                   {profile.motto || t('messages.noMotto')}
                 </p>
                 <p className="muted mono">
-                  #{profile.id} · {record.hotel}
+                  {profile.id > 0 ? `#${profile.id}` : profile.uniqueId} ·{' '}
+                  {record.hotel}
                 </p>
                 <p className="muted">
-                  {profile.isFriend
-                    ? t('messages.onYourFriendsList')
-                    : profile.requestSent
-                      ? t('messages.friendRequestSent')
-                      : t('messages.notOnYourFriendsList')}
+                  {profile.apiOnly
+                    ? t('messages.informationNotReceivedInThisQuery')
+                    : profile.isFriend
+                      ? t('messages.onYourFriendsList')
+                      : profile.requestSent
+                        ? t('messages.friendRequestSent')
+                        : t('messages.notOnYourFriendsList')}
                 </p>
                 <div className="profile-copy-actions">
                   <button
@@ -438,9 +445,15 @@ export function ProfileDialog({
             <section className="profile-section">
               <h3>
                 {'' + t('messages.groups') + ' '}
-                <span className="muted">({profile.groups.length})</span>
+                {!profile.apiOnly && (
+                  <span className="muted">({profile.groups.length})</span>
+                )}
               </h3>
-              {profile.groups.length ? (
+              {profile.apiOnly ? (
+                <p className="muted">
+                  {t('messages.informationNotReceivedInThisQuery')}
+                </p>
+              ) : profile.groups.length ? (
                 <div className="profile-groups">
                   {profile.groups.map((g) => (
                     <div key={g.id}>

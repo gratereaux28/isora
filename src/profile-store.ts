@@ -23,10 +23,21 @@ export function validateProfiles(value: any): ProfileRecord[] {
       !text(r.hotel, 253) ||
       !r.hotel ||
       !integer(p.id) ||
-      p.id < 1 ||
+      (p.id < 1 &&
+        !(
+          p.id === 0 &&
+          p.apiOnly === true &&
+          typeof p.uniqueId === 'string' &&
+          /^hh[a-z0-9-]{1,128}$/i.test(p.uniqueId)
+        )) ||
+      (p.uniqueId !== undefined &&
+        !(
+          typeof p.uniqueId === 'string' &&
+          /^hh[a-z0-9-]{1,128}$/i.test(p.uniqueId)
+        )) ||
       !text(p.name, 100) ||
       !p.name ||
-      r.key !== profileKey(r.hotel, p.id) ||
+      r.key !== profileKey(r.hotel, p.id || p.uniqueId) ||
       seen.has(r.key) ||
       !date(r.firstSearched) ||
       !date(r.lastSearched) ||
@@ -43,9 +54,13 @@ export function validateProfiles(value: any): ProfileRecord[] {
         (integer(p.friends) && p.friends >= 0) ||
         (p.limited === true && p.friends === null)
       ) ||
-      [p.displayInClient, p.limited, p.privateProfile].some(
-        (value) => value !== undefined && typeof value !== 'boolean',
-      ) ||
+      [
+        p.displayInClient,
+        p.limited,
+        p.privateProfile,
+        p.apiOnly,
+        p.onlineKnown,
+      ].some((value) => value !== undefined && typeof value !== 'boolean') ||
       !integer(p.lastLogin) ||
       [p.isFriend, p.requestSent, p.online].some(
         (v) => typeof v !== 'boolean',
