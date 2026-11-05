@@ -35,9 +35,17 @@ export function validateProfiles(value: any): ProfileRecord[] {
       !text(p.figure) ||
       !text(p.motto) ||
       !text(p.created, 100) ||
-      !integer(p.activityPoints) ||
-      !integer(p.friends) ||
-      p.friends < 0 ||
+      !(
+        (integer(p.activityPoints) && p.activityPoints >= 0) ||
+        (p.limited === true && p.activityPoints === null)
+      ) ||
+      !(
+        (integer(p.friends) && p.friends >= 0) ||
+        (p.limited === true && p.friends === null)
+      ) ||
+      [p.displayInClient, p.limited, p.privateProfile].some(
+        (value) => value !== undefined && typeof value !== 'boolean',
+      ) ||
       !integer(p.lastLogin) ||
       [p.isFriend, p.requestSent, p.online].some(
         (v) => typeof v !== 'boolean',

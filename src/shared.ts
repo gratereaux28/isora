@@ -184,8 +184,11 @@ export interface HabboProfile {
   figure: string;
   motto: string;
   created: string;
-  activityPoints: number;
-  friends: number;
+  activityPoints: number | null;
+  friends: number | null;
+  displayInClient?: boolean;
+  limited?: boolean;
+  privateProfile?: boolean;
   isFriend: boolean;
   requestSent: boolean;
   online: boolean;

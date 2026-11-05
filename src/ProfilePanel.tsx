@@ -287,6 +287,15 @@ export function ProfileDialog({
         )}
         {profile && record && (
           <>
+            {(profile.privateProfile || profile.limited) && (
+              <p className="profile-privacy-note">
+                {t(
+                  profile.privateProfile
+                    ? 'profiles.privateNotice'
+                    : 'profiles.limitedNotice',
+                )}
+              </p>
+            )}
             <div className="profile-summary">
               <div className="profile-avatar">
                 <img
@@ -346,11 +355,13 @@ export function ProfileDialog({
                 ],
                 [
                   t('messages.achievementScore'),
-                  profile.activityPoints.toLocaleString(language),
+                  profile.activityPoints?.toLocaleString(language) ??
+                    t('common.unavailable'),
                 ],
                 [
                   t('messages.friends'),
-                  profile.friends.toLocaleString(language),
+                  profile.friends?.toLocaleString(language) ??
+                    t('common.unavailable'),
                 ],
                 [
                   t('messages.lastAccess'),

@@ -3,6 +3,7 @@ import type { Model } from './model';
 import type { HabboProfile, ProfileQuery, ProfileRecord } from './shared';
 import { normalize } from './protocol/gearth';
 import { Reader, Writer, type Intercept } from './protocol/packet';
+import { PublicProfiles } from './public-profiles';
 
 const profileIn = ['extendedprofile', 'userprofile'];
 const byId = ['GetExtendedProfile', 'GetUserProfile', 'UserProfile'];
@@ -53,7 +54,7 @@ export function parseProfile(body: Buffer): HabboProfile {
       forum: r.bool(),
     });
   p.lastLogin = r.int();
-  r.bool(); // The client window flag is deliberately not presented as a privacy setting.
+  p.displayInClient = r.bool();
   if (r.data.length - r.position >= 15) {
     r.bool();
     p.level = r.int();
@@ -62,12 +63,24 @@ export function parseProfile(body: Buffer): HabboProfile {
     r.bool();
     r.bool();
   }
+  // A suppressed client window alone does not mean the profile is private:
+  // Isora also requests ordinary profiles with that flag disabled.
+  p.limited =
+    !p.displayInClient &&
+    (p.friends! < 0 || p.activityPoints! < 0 || !p.created);
+  if (p.limited) {
+    if (p.friends! < 0) p.friends = null;
+    if (p.activityPoints! < 0) p.activityPoints = null;
+    if (p.level !== null && p.level < 0) p.level = null;
+    if (p.starGems !== null && p.starGems < 0) p.starGems = null;
+    p.lastLogin = -1;
+  }
   if (
     p.id < 1 ||
     !p.name ||
     p.name.length > 100 ||
-    p.friends < 0 ||
-    p.activityPoints < 0
+    (p.friends !== null && p.friends < 0) ||
+    (p.activityPoints !== null && p.activityPoints < 0)
   )
     throw new Error(messageRef('errors.invalidProfileReceived'));
   return p;
@@ -80,13 +93,18 @@ interface Pending {
   reject: (error: Error) => void;
   wantBadges: boolean;
   wantRelationships: boolean;
+  wantPublic: boolean;
+  abort: AbortController;
 }
 export class Profiles {
   private sending = false;
   private pending?: Pending;
   private own: { query: ProfileQuery; until: number }[] = [];
   private client: { query: ProfileQuery; until: number }[] = [];
-  constructor(private model: Model) {}
+  constructor(
+    private model: Model,
+    private publicProfiles = new PublicProfiles(),
+  ) {}
   lookup(query: ProfileQuery): Promise<ProfileRecord> {
     if (
       !query ||
@@ -159,6 +177,8 @@ export class Profiles {
         timer,
         wantBadges: false,
         wantRelationships: false,
+        wantPublic: false,
+        abort: new AbortController(),
       };
       this.own = this.own.filter((v) => v.until > Date.now()).slice(-19);
       this.own.push({ query: clean, until: Date.now() + 60000 });
@@ -183,6 +203,7 @@ export class Profiles {
     const pending = this.pending;
     this.pending = undefined;
     clearTimeout(pending.timer);
+    pending.abort.abort();
     pending.reject(new Error(message));
   }
   sessionEnded() {
@@ -272,7 +293,11 @@ export class Profiles {
         return;
       pending.profile = profile;
       clearTimeout(pending.timer);
-      pending.timer = setTimeout(() => this.finish(), 1500);
+      pending.wantPublic = profile.limited === true;
+      pending.timer = setTimeout(
+        () => this.finish(),
+        pending.wantPublic ? 3500 : 1500,
+      );
       const badges = this.model.earth.resolve('out', [
         'GetSelectedBadges',
         'UserCurrentBadges',
@@ -306,10 +331,14 @@ export class Profiles {
               relationships!.id,
               new Writer().int(profile.id).buffer(),
             );
-          if (!pending.wantBadges && !pending.wantRelationships) this.finish();
+          if (pending.wantPublic) void this.enrich(pending);
+          this.finishIfReady();
         } catch (error) {
           this.model.notice((error as Error).message);
-          this.finish();
+          pending.wantBadges = false;
+          pending.wantRelationships = false;
+          if (pending.wantPublic) void this.enrich(pending);
+          this.finishIfReady();
         }
       });
       return;
@@ -347,7 +376,44 @@ export class Profiles {
       pending.profile.relationships = relationships;
       pending.wantRelationships = false;
     }
-    if (!pending.wantBadges && !pending.wantRelationships) this.finish();
+    this.finishIfReady();
+  }
+  private async enrich(pending: Pending) {
+    try {
+      const extra = await this.publicProfiles.load(
+        pending.query.hotel,
+        pending.profile!.name,
+        pending.abort.signal,
+      );
+      if (this.pending !== pending) return;
+      Object.assign(pending.profile!, {
+        ...(extra.motto !== undefined ? { motto: extra.motto } : {}),
+        ...(extra.created ? { created: extra.created } : {}),
+        ...(extra.figure ? { figure: extra.figure } : {}),
+        ...(extra.activityPoints !== undefined
+          ? { activityPoints: extra.activityPoints }
+          : {}),
+        ...(extra.privateProfile !== undefined
+          ? { privateProfile: extra.privateProfile }
+          : {}),
+      });
+    } catch {
+      if (this.pending !== pending) return;
+      this.model.notice(messageRef('profiles.publicDataUnavailable'));
+    }
+    if (this.pending !== pending) return;
+    pending.wantPublic = false;
+    this.finishIfReady();
+  }
+  private finishIfReady() {
+    const pending = this.pending;
+    if (
+      pending?.profile &&
+      !pending.wantBadges &&
+      !pending.wantRelationships &&
+      !pending.wantPublic
+    )
+      this.finish();
   }
   private finish() {
     const pending = this.pending;
@@ -373,6 +439,7 @@ export class Profiles {
     };
     this.pending = undefined;
     clearTimeout(pending.timer);
+    pending.abort.abort();
     this.model.state.profileHistory = [
       record,
       ...this.model.state.profileHistory.filter((r) => r.key !== key),

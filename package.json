@@ -1,7 +1,7 @@
 {
   "name": "isora",
   "productName": "Isora",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "private": true,
   "description": "Isora: Habbo Flash/Nitro tools for G-Earth",
   "keywords": [],
@@ -24,7 +24,8 @@
     "test:catalog-simulation": "tsx tests/catalog-simulation.mts",
     "screenshot": "node scripts/screenshot.mjs",
     "test:extension": "tsx tests/extension-launch.mts",
-    "test:extension-ui": "tsx tests/extension-window.mts"
+    "test:extension-ui": "tsx tests/extension-window.mts",
+    "test:profiles-simulation": "tsx tests/profiles-simulation.mts"
   },
   "devDependencies": {
     "@electron-forge/cli": "^8.0.1",

@@ -564,29 +564,6 @@ p {
   font-size: 10px;
   color: #b7adc8;
 }
-.page-footer {
-  display: flex;
-  justify-content: space-between;
-  border-top: 1px solid #24262e;
-  margin-top: 18px;
-  padding: 13px 0;
-  color: #555b67;
-  font-size: 9px;
-}
-.page-footer > span:last-child {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-.footer-square {
-  width: 5px;
-  height: 5px;
-  background: #75648d;
-  transform: rotate(45deg);
-}
-.page-footer .muted {
-  padding: 0 5px;
-}
 .alert {
   display: flex;
   align-items: center;
@@ -2033,8 +2010,7 @@ tr[aria-haspopup='menu']:focus-visible {
   .chat-line b {
     min-width: 0;
   }
-  .card-footer,
-  .page-footer {
+  .card-footer {
     flex-wrap: wrap;
     gap: 8px;
   }
@@ -2272,9 +2248,57 @@ tr[aria-haspopup='menu']:focus-visible {
   margin: 5px 0 0;
   overflow-wrap: anywhere;
 }
-.language-settings select {
-  width: 100%;
+.language-select {
+  position: relative;
 }
+.language-select > button,
+.language-options > [role='option'] {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 36px;
+  padding: 8px 10px;
+  font: inherit;
+  text-align: left;
+}
+.language-select > button {
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: #111218;
+  color: #e6e6ed;
+  cursor: pointer;
+}
+.language-select > button > span,
+.language-options > [role='option'] > span {
+  flex: 1;
+}
+.language-flag {
+  flex: 0 0 24px;
+  width: 24px;
+  height: 17px;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.language-options {
+  position: absolute;
+  top: calc(100% + 5px);
+  inset-inline: 0;
+  z-index: 12;
+  padding: 4px;
+  border: 1px solid #3e394c;
+  border-radius: 6px;
+  background: #191a22;
+  box-shadow: 0 8px 20px #0004;
+}
+.language-options > [role='option'] {
+  cursor: pointer;
+  border-radius: 3px;
+}
+.language-options > [role='option'].active {
+  background: #302a40;
+}
+
 @media (max-width: 600px) {
   .about-card {
     padding: 18px;
@@ -2283,4 +2307,15 @@ tr[aria-haspopup='menu']:focus-visible {
     grid-template-columns: 1fr;
     gap: 12px;
   }
+}
+
+.profile-privacy-note {
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  border: 1px solid #3c354b;
+  border-radius: 5px;
+  background: #211d2b;
+  color: #c9bfdb;
+  font-size: 11px;
+  line-height: 1.6;
 }

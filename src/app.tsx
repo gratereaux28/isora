@@ -1,3 +1,4 @@
+import { LanguageSelect } from './LanguageSelect';
 import appInfo from '../package.json';
 import { I18nProvider } from './LocaleProvider';
 import {
@@ -743,10 +744,6 @@ function App() {
                 <h1>{t(active.label)}</h1>
                 <p>{t(active.caption)}</p>
               </div>
-              <span className="platform-pill">
-                <span className="tiny-square" />
-                {t('messages.flashNitro2')}
-              </span>
             </div>
             {error && (
               <div className="alert error" role="alert">
@@ -1878,31 +1875,18 @@ function App() {
                 <section className="card language-settings">
                   <h2>{t('settings.language.label')}</h2>
                   <div className="form-panel">
-                    <label htmlFor="language-choice">
+                    <label id="language-choice-label" htmlFor="language-choice">
                       {t('settings.language.label')}
                     </label>
-                    <select
-                      id="language-choice"
+                    <LanguageSelect
                       value={s.settings.language}
-                      onChange={(event) => {
-                        const choice = event.target
-                          .value as Settings['language'];
+                      onChange={(choice) => {
                         void run(async () => {
                           await window.isora.settings({ language: choice });
                           setState(await window.isora.snapshot());
                         });
                       }}
-                    >
-                      <option value="auto">
-                        {t('settings.language.automatic')}
-                      </option>
-                      <option value="es">
-                        {t('settings.language.spanish')}
-                      </option>
-                      <option value="en">
-                        {t('settings.language.english')}
-                      </option>
-                    </select>
+                    />
                     <p className="muted">
                       {t(
                         'messages.automaticSpanishOnHabboEsAndEnglishOnOtherHotels',
@@ -2034,17 +2018,6 @@ function App() {
                 </section>
               </div>
             )}
-            <footer className="page-footer">
-              <span>
-                {'' + t('messages.isora') + ' '}
-                <span className="muted">/</span>
-                {t('messages.anIndependentCompanion')}
-              </span>
-              <span>
-                {'' + t('messages.madeForYourNextRoom') + ' '}
-                <span className="footer-square" />
-              </span>
-            </footer>
           </div>
         </main>
         {outfitForm && (

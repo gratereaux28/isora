@@ -16,6 +16,7 @@ import fs from 'node:fs';
 import started from 'electron-squirrel-startup';
 import { GEarth } from './protocol/gearth';
 import { Model } from './model';
+import { PublicProfiles } from './public-profiles';
 import { ProfileStore } from './profile-store';
 import { FurniCatalog } from './furni-catalog';
 import { hotelDomain } from './user-actions';
@@ -135,7 +136,27 @@ app.whenReady().then(() => {
       app.quit();
     }
   });
-  model = new Model(earth);
+  const publicProfiles = new PublicProfiles({
+    fetcher: (url, init) =>
+      net.fetch(url instanceof URL ? url.href : url, init),
+    ...(!app.isPackaged &&
+    process.env.ISORA_TEST_DATA &&
+    process.env.ISORA_TEST_PROFILE_URL
+      ? {
+          url: (_hotel: string, name: string) => {
+            const url = new URL(process.env.ISORA_TEST_PROFILE_URL!);
+            if (
+              !['127.0.0.1', 'localhost'].includes(url.hostname) ||
+              url.protocol !== 'http:'
+            )
+              throw new Error(messageRef('errors.invalidTestUrl'));
+            url.searchParams.set('name', name);
+            return url.href;
+          },
+        }
+      : {}),
+  });
+  model = new Model(earth, undefined, { publicProfiles });
   for (const name of ['room-history.json', 'room-history.json.bak']) {
     try {
       fs.rmSync(path.join(app.getPath('userData'), name), { force: true });

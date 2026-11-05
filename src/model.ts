@@ -4,6 +4,7 @@ import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import { General } from './general';
 import { Profiles } from './profiles';
+import type { PublicProfiles } from './public-profiles';
 import { FurniHighlight } from './furni-highlight';
 import type { FurniInfo } from './furni-catalog';
 import { generalInitial } from './general-options';
@@ -53,6 +54,7 @@ export class Model extends EventEmitter {
       settings?: Partial<Settings>;
       outfits?: Outfit[];
     },
+    sources?: { publicProfiles?: PublicProfiles },
   ) {
     super();
     this.state = {
@@ -81,7 +83,7 @@ export class Model extends EventEmitter {
     };
     this.general = new General(this);
     this.furniHighlight = new FurniHighlight(this);
-    this.profiles = new Profiles(this);
+    this.profiles = new Profiles(this, sources?.publicProfiles);
     earth.on('status', (status) => {
       this.state.status = status;
       this.changed();
