@@ -11,6 +11,7 @@ import { generalInitial } from './general-options';
 import { readStuff } from './room-transform';
 import { GEarth, normalize } from './protocol/gearth';
 import { Reader, Writer, parseHex, type Intercept } from './protocol/packet';
+import { parseConsoleMessage } from './protocol/console-message';
 import { RoomVisitors, sameRoom } from './room-visitors';
 import {
   defaults,
@@ -35,6 +36,14 @@ const aliases = {
   close: ['CloseConnection'],
   figure: ['UserChange'],
   inventory: ['FurniList', 'FurnitureList'],
+  console: [
+    'NewConsole',
+    'NewConsoleMessage',
+    'MessengerNewConsole',
+    'MessengerNewConsoleMessage',
+    'NewMessenger',
+    'NewMessengerMessage',
+  ],
 };
 export class Model extends EventEmitter {
   readonly furniHighlight: FurniHighlight;
@@ -727,22 +736,12 @@ export class Model extends EventEmitter {
         this.notify('whisper', avatar?.name ?? `#${index}`, text);
       return;
     }
-    if (is(['NewConsole', 'NewConsoleMessage', 'NewMessengerMessage'])) {
+    if (is(aliases.console)) {
       if (!this.state.settings.notifyConsole) return;
-      const chatId = r.int(),
-        text = r.string();
-      if (r.data.length - r.position >= 4) r.int();
-      const messageId = r.data.length - r.position >= 2 ? r.string() : '';
-      let sender = chatId,
-        name = this.general.friendName(chatId);
-      if (r.data.length - r.position >= 8) {
-        r.int();
-        sender = r.int();
-        name = r.string() || this.general.friendName(sender);
-      }
+      const { sender, text, name, messageId } = parseConsoleMessage(p.body);
       if (sender === this.state.self?.id) return;
       if (messageId) {
-        const key = `${sender}:${messageId}`;
+        const key = JSON.stringify([sender, messageId, text]);
         if (this.consoleMessages.has(key)) return;
         this.consoleMessages.add(key);
         if (this.consoleMessages.size > 512)
@@ -750,7 +749,11 @@ export class Model extends EventEmitter {
             this.consoleMessages.values().next().value!,
           );
       }
-      this.notify('console', name ?? `#${sender}`, text);
+      this.notify(
+        'console',
+        name ?? this.general.friendName(sender) ?? `#${sender}`,
+        text,
+      );
       return;
     }
     if (is(aliases.figure)) {
