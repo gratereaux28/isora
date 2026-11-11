@@ -12,6 +12,7 @@ import {
   Palette,
   CircleHelp,
   SlidersHorizontal,
+  Bell,
 } from 'lucide-react';
 import type { Settings, Snapshot } from './shared';
 type BooleanKey = {
@@ -208,6 +209,27 @@ const groups: {
         'general.options.muteScratches.description',
         'in',
         ['PetRespectNotification'],
+      ],
+    ],
+  },
+  {
+    title: 'general.groups.notifications',
+    icon: Bell,
+    options: [
+      [
+        'notifyWhispers',
+        'general.options.notifyWhispers.label',
+        'general.options.notifyWhispers.description',
+      ],
+      [
+        'notifyConsole',
+        'general.options.notifyConsole.label',
+        'general.options.notifyConsole.description',
+      ],
+      [
+        'notifyFriendEnter',
+        'general.options.notifyFriendEnter.label',
+        'general.options.notifyFriendEnter.description',
       ],
     ],
   },
@@ -497,6 +519,23 @@ export function GeneralPanel({
                   >
                     {t('messages.saveCommands')}
                   </button>
+                </div>
+              )}
+              {group.title === 'general.groups.notifications' && (
+                <div className="form-panel compact">
+                  <p>{t('notifications.help')}</p>
+                  {s.notifyFriendEnter && !state.general.friendsLoaded && (
+                    <>
+                      <p>{t('notifications.friendsNeeded')}</p>
+                      <button
+                        className="button subtle"
+                        disabled={!state.gameConnected}
+                        onClick={() => action('loadFriends')}
+                      >
+                        {t('messages.loadFriends')}
+                      </button>
+                    </>
+                  )}
                 </div>
               )}
               {group.title === 'general.groups.clickModeration' && (

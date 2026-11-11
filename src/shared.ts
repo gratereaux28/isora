@@ -80,11 +80,19 @@ export interface PacketEntry {
   modified: boolean;
 }
 export interface InventoryItem {
+  name?: string;
+  identifier?: string;
+  description?: string;
   id: number;
   itemId: number;
   type: string;
   kind: number;
   tradeable: boolean;
+}
+export interface DesktopNotice {
+  kind: 'whisper' | 'console' | 'friendEnter';
+  title: string;
+  body: string;
 }
 export interface VisitorRecord {
   id: number;

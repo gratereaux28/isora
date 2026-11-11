@@ -983,27 +983,6 @@ function App() {
             )}
             {page === 'room' && (
               <>
-                <div className="room-summary">
-                  <div className="room-symbol">
-                    <Layers size={25} />
-                  </div>
-                  <div>
-                    <h2>
-                      {s.room.id
-                        ? t('room.title', { v0: s.room.id })
-                        : t('messages.noActiveRoom2')}
-                    </h2>
-                    <p>
-                      {s.room.name
-                        ? t('messages.model', { v0: s.room.name })
-                        : t('messages.enterARoomToLoadItsUsers')}
-                    </p>
-                  </div>
-                  <span className="platform-pill">
-                    {s.avatars.length}
-                    {' ' + t('messages.avatars') + ''}
-                  </span>
-                </div>
                 <section className="card full-card">
                   <div className="tabs">
                     <button
@@ -1382,7 +1361,7 @@ function App() {
             {page === 'inventory' && (
               <section className="card full-card">
                 <div className="toolbar">
-                  {search(t('messages.searchFurnitureIdOrType'))}
+                  {search(t('inventory.search'))}
                   <button
                     className="button primary"
                     disabled={!ready}
@@ -1409,9 +1388,10 @@ function App() {
                   </Empty>
                 ) : (
                   <div className="table-scroll">
-                    <table>
+                    <table data-testid="inventory-table">
                       <thead>
                         <tr>
+                          <th>{t('common.name')}</th>
                           <th>{t('messages.inventoryId')}</th>
                           <th>{t('messages.furnitureId')}</th>
                           <th>{t('messages.type2')}</th>
@@ -1422,10 +1402,21 @@ function App() {
                       <tbody>
                         {s.inventory
                           .filter((i) =>
-                            `${i.itemId} ${i.id} ${i.kind}`.includes(query),
+                            filterText(
+                              `${i.name ?? ''} ${i.identifier ?? ''} ${i.itemId} ${i.id} ${i.kind}`,
+                            ).includes(filterText(query)),
                           )
                           .map((i) => (
                             <tr key={i.itemId}>
+                              <td title={i.description}>
+                                <b className="furni-name">
+                                  {i.name ||
+                                    t('messages.furnitureType', { v0: i.kind })}
+                                </b>
+                                <small className="furni-identifier muted">
+                                  {i.identifier || t('messages.namePending')}
+                                </small>
+                              </td>
                               <td className="mono">{i.itemId}</td>
                               <td className="mono">{i.id}</td>
                               <td>
@@ -1448,7 +1439,6 @@ function App() {
                 <div className="card-footer">
                   {s.inventory.length}
                   {' ' + t('messages.items') + ''}
-                  <span>{t('messages.flashNitroInventoryData')}</span>
                 </div>
               </section>
             )}

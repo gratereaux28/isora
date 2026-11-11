@@ -450,6 +450,9 @@ export class General {
     r.short();
     return { id, name };
   }
+  friendName(id: number) {
+    return this.friends.get(id);
+  }
   private handleFriends(name: string, r: Reader) {
     if (name === 'friendlistfragment') {
       const total = r.count(),

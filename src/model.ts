@@ -21,6 +21,7 @@ import {
   type Avatar,
   type InventoryItem,
   type RoomIdentity,
+  type DesktopNotice,
 } from './shared';
 
 const aliases = {
@@ -37,7 +38,9 @@ const aliases = {
 };
 export class Model extends EventEmitter {
   readonly furniHighlight: FurniHighlight;
-  private furniInfo = new Map<number, FurniInfo>();
+  private furniInfo = new Map<string, FurniInfo>();
+  private roomUsersReceived = false;
+  private consoleMessages = new Set<string>();
   readonly profiles: Profiles;
   readonly general: General;
   readonly visitors = new RoomVisitors();
@@ -207,14 +210,49 @@ export class Model extends EventEmitter {
   }
   applyFurniCatalog(hotel: string, entries: FurniInfo[]) {
     if (!this.state.gameConnected || this.state.session?.host !== hotel) return;
-    this.furniInfo = new Map(entries.map((entry) => [entry.kind, entry]));
+    this.furniInfo = new Map(
+      entries.map((entry) => [
+        `${entry.placement ?? 'floor'}:${entry.kind}`,
+        entry,
+      ]),
+    );
     for (const f of this.state.furni) {
-      const entry = this.furniInfo.get(f.kind);
+      const entry = this.furniInfo.get(`floor:${f.kind}`);
       f.name = entry?.name;
       f.identifier = entry?.identifier;
       f.description = entry?.description;
     }
+    this.labelInventory();
     this.changed();
+  }
+  private labelInventory() {
+    for (const item of this.state.inventory) {
+      const placement =
+        item.type.toUpperCase() === 'S'
+          ? 'floor'
+          : item.type.toUpperCase() === 'I'
+            ? 'wall'
+            : '';
+      const info = this.furniInfo.get(`${placement}:${item.kind}`);
+      item.name = info?.name;
+      item.identifier = info?.identifier;
+      item.description = info?.description;
+    }
+  }
+  private notify(kind: DesktopNotice['kind'], name: string, text: string) {
+    const setting = {
+      whisper: 'notifyWhispers',
+      console: 'notifyConsole',
+      friendEnter: 'notifyFriendEnter',
+    } as const;
+    if (!this.state.gameConnected || !this.state.settings[setting[kind]])
+      return;
+    const notice: DesktopNotice = {
+      kind,
+      title: `Isora · ${this.t(`notifications.${kind}.title`, { name })}`,
+      body: text.replace(/\p{Cc}/gu, ' ').slice(0, 500),
+    };
+    this.emit('desktopNotification', notice);
   }
   private publishVisitors() {
     this.state.visitors = this.visitors.snapshot();
@@ -223,6 +261,7 @@ export class Model extends EventEmitter {
     this.notice(`[${reason}] ${detail}`);
   }
   private resetRoom(preserveVisitors = false) {
+    this.roomUsersReceived = false;
     this.furniHighlight?.stop(false);
     if (preserveVisitors) this.visitors.pause();
     else this.visitors.clear();
@@ -235,6 +274,7 @@ export class Model extends EventEmitter {
     this.publishVisitors();
   }
   private resetGame(reason: string, detail: string) {
+    this.consoleMessages.clear();
     this.resetRoom();
     this.pendingRoom = null;
     this.state.self = null;
@@ -492,7 +532,7 @@ export class Model extends EventEmitter {
           '';
         if (is(['ObjectAdd'])) ownerName = r.string();
         entries.push({
-          ...this.furniInfo.get(kind),
+          ...this.furniInfo.get(`floor:${kind}`),
           id,
           kind,
           x,
@@ -566,6 +606,7 @@ export class Model extends EventEmitter {
       return;
     }
     if (is(aliases.users)) {
+      const initialSnapshot = !this.roomUsersReceived;
       const avatars: Avatar[] = [];
       for (let i = 0, n = r.count(); i < n; i++) {
         const start = r.position;
@@ -620,6 +661,9 @@ export class Model extends EventEmitter {
         );
       }
       for (const avatar of avatars) {
+        const wasPresent = this.state.avatars.some(
+          (a) => a.id === avatar.id && a.type === avatar.type,
+        );
         const existing = this.state.avatars.findIndex(
           (a) => a.index === avatar.index,
         );
@@ -638,8 +682,22 @@ export class Model extends EventEmitter {
           } else this.state.avatars.push(avatar);
           if (this.activeRoom) this.visitors.observe(avatar);
           this.log(avatar.name, messageRef('messages.enteredTheRoom'), 'entry');
+          if (
+            !initialSnapshot &&
+            !wasPresent &&
+            this.activeRoom &&
+            avatar.type === 1 &&
+            avatar.id !== this.state.self?.id &&
+            this.general.friendName(avatar.id)
+          )
+            this.notify(
+              'friendEnter',
+              avatar.name,
+              this.t('notifications.friendEnter.body', { name: avatar.name }),
+            );
         }
       }
+      this.roomUsersReceived = true;
       if (this.activeRoom) this.publishVisitors();
       return;
     }
@@ -665,6 +723,34 @@ export class Model extends EventEmitter {
         text,
         is(aliases.whisper) ? 'whisper' : is(aliases.shout) ? 'shout' : 'chat',
       );
+      if (is(aliases.whisper) && (!avatar || avatar.id !== this.state.self?.id))
+        this.notify('whisper', avatar?.name ?? `#${index}`, text);
+      return;
+    }
+    if (is(['NewConsole', 'NewConsoleMessage', 'NewMessengerMessage'])) {
+      if (!this.state.settings.notifyConsole) return;
+      const chatId = r.int(),
+        text = r.string();
+      if (r.data.length - r.position >= 4) r.int();
+      const messageId = r.data.length - r.position >= 2 ? r.string() : '';
+      let sender = chatId,
+        name = this.general.friendName(chatId);
+      if (r.data.length - r.position >= 8) {
+        r.int();
+        sender = r.int();
+        name = r.string() || this.general.friendName(sender);
+      }
+      if (sender === this.state.self?.id) return;
+      if (messageId) {
+        const key = `${sender}:${messageId}`;
+        if (this.consoleMessages.has(key)) return;
+        this.consoleMessages.add(key);
+        if (this.consoleMessages.size > 512)
+          this.consoleMessages.delete(
+            this.consoleMessages.values().next().value!,
+          );
+      }
+      this.notify('console', name ?? `#${sender}`, text);
       return;
     }
     if (is(aliases.figure)) {
@@ -711,6 +797,7 @@ export class Model extends EventEmitter {
       this.inventoryParts.set(part, items);
       if (this.inventoryParts.size === total) {
         this.state.inventory = [...this.inventoryParts.values()].flat();
+        this.labelInventory();
         this.inventoryParts.clear();
       }
     }

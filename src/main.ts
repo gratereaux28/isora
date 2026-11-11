@@ -10,6 +10,7 @@ import {
   shell,
   clipboard,
   net,
+  Notification,
 } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -22,7 +23,7 @@ import { FurniCatalog } from './furni-catalog';
 import { hotelDomain } from './user-actions';
 import { profileURL } from './user-actions';
 import { performUserAction } from './user-actions';
-import type { Outfit, Settings } from './shared';
+import type { Outfit, Settings, DesktopNotice } from './shared';
 import { readGEarthLaunch } from './gearth-launch';
 
 if (started) app.quit();
@@ -36,6 +37,15 @@ let settingsFile: string;
 let managedExtension = false;
 let quitRequested = false;
 let displayRequested = true;
+const desktopNotifications = new Set<Notification>();
+function showWindow() {
+  if (quitRequested) return;
+  displayRequested = true;
+  if (!window) createWindow();
+  if (window?.isMinimized()) window.restore();
+  window?.show();
+  window?.focus();
+}
 function createWindow() {
   window = new BrowserWindow({
     width: 1280,
@@ -157,6 +167,44 @@ app.whenReady().then(() => {
       : {}),
   });
   model = new Model(earth, undefined, { publicProfiles });
+  model.on('desktopNotification', (notice: DesktopNotice) => {
+    if (!Notification.isSupported()) {
+      model.notice(messageRef('notifications.unavailable'));
+      return;
+    }
+    try {
+      const notification = new Notification({
+        title: notice.title,
+        body: notice.body,
+        icon: path.join(
+          app.isPackaged ? process.resourcesPath : app.getAppPath(),
+          'assets',
+          'isora.png',
+        ),
+      });
+      desktopNotifications.add(notification);
+      if (desktopNotifications.size > 20) {
+        const oldest = desktopNotifications.values().next().value!;
+        desktopNotifications.delete(oldest);
+        oldest.close();
+      }
+      notification.once('close', () =>
+        desktopNotifications.delete(notification),
+      );
+      notification.once('failed', () => {
+        desktopNotifications.delete(notification);
+        model.notice(messageRef('notifications.unavailable'));
+      });
+      notification.once('click', () => {
+        showWindow();
+        notification.close();
+        desktopNotifications.delete(notification);
+      });
+      notification.show();
+    } catch {
+      model.notice(messageRef('notifications.unavailable'));
+    }
+  });
   for (const name of ['room-history.json', 'room-history.json.bak']) {
     try {
       fs.rmSync(path.join(app.getPath('userData'), name), { force: true });
@@ -328,13 +376,7 @@ app.whenReady().then(() => {
           window.webContents.send('isora:state', model.state);
       }, 150);
   });
-  earth.on('activate', () => {
-    displayRequested = true;
-    if (!window) createWindow();
-    if (window?.isMinimized()) window.restore();
-    window?.show();
-    window?.focus();
-  });
+  earth.on('activate', showWindow);
   const handle = (channel: string, fn: (...args: any[]) => unknown) =>
     ipcMain.handle(channel, (event, ...args) => {
       if (
@@ -457,6 +499,8 @@ app.whenReady().then(() => {
 });
 app.on('before-quit', () => {
   quitRequested = true;
+  for (const notification of desktopNotifications) notification.close();
+  desktopNotifications.clear();
   model?.furniHighlight.stop();
   model?.profiles.sessionEnded();
   model?.shutdown();

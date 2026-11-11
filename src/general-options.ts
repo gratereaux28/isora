@@ -1,4 +1,7 @@
 export interface GeneralSettings {
+  notifyWhispers: boolean;
+  notifyConsole: boolean;
+  notifyFriendEnter: boolean;
   antiIdle: boolean;
   antiIdleOut: boolean;
   turnOnReselect: boolean;
@@ -37,6 +40,9 @@ export interface GeneralSettings {
   tonerColor: string;
 }
 export const generalDefaults: GeneralSettings = {
+  notifyWhispers: false,
+  notifyConsole: false,
+  notifyFriendEnter: false,
   antiIdle: false,
   antiIdleOut: false,
   turnOnReselect: false,

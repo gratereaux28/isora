@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { hotelDomain } from './user-actions';
 export interface FurniInfo {
+  placement?: 'floor' | 'wall';
   kind: number;
   name: string;
   identifier: string;
@@ -26,49 +27,72 @@ export function furniDataURL(hotel: string) {
   return `https://www.habbo.${domain}/gamedata/furnidata_json/1`;
 }
 export function parseFurniData(value: any): FurniInfo[] {
-  const rows = value?.roomitemtypes?.furnitype;
-  if (!Array.isArray(rows) || !rows.length || rows.length > 200000)
+  const floor = value?.roomitemtypes?.furnitype;
+  const wall = value?.wallitemtypes?.furnitype ?? [];
+  if (
+    !Array.isArray(floor) ||
+    !Array.isArray(wall) ||
+    floor.length + wall.length === 0 ||
+    floor.length + wall.length > 200000
+  )
     throw new Error(messageRef('errors.invalidFurnitureCatalog'));
-  const entries = new Map<number, FurniInfo>();
-  for (const row of rows) {
-    if (
-      !Number.isInteger(row?.id) ||
-      row.id < 0 ||
-      typeof row.classname !== 'string' ||
-      !row.classname ||
-      row.classname.length > 500 ||
-      (row.name != null &&
-        (typeof row.name !== 'string' || row.name.length > 2000)) ||
-      (row.description != null &&
-        (typeof row.description !== 'string' || row.description.length > 10000))
-    )
-      throw new Error(messageRef('errors.invalidFurnitureCatalogEntry'));
-    entries.set(row.id, {
-      kind: row.id,
-      name: row.name?.trim() || row.classname,
-      identifier: row.classname,
-      description: row.description ?? '',
-    });
-  }
+  const entries = new Map<string, FurniInfo>();
+  for (const [placement, rows] of [
+    ['floor', floor],
+    ['wall', wall],
+  ] as const)
+    for (const row of rows) {
+      if (
+        !Number.isInteger(row?.id) ||
+        row.id < 0 ||
+        typeof row.classname !== 'string' ||
+        !row.classname ||
+        row.classname.length > 500 ||
+        (row.name != null &&
+          (typeof row.name !== 'string' || row.name.length > 2000)) ||
+        (row.description != null &&
+          (typeof row.description !== 'string' ||
+            row.description.length > 10000))
+      )
+        throw new Error(messageRef('errors.invalidFurnitureCatalogEntry'));
+      entries.set(`${placement}:${row.id}`, {
+        placement,
+        kind: row.id,
+        name: row.name?.trim() || row.classname,
+        identifier: row.classname,
+        description: row.description ?? '',
+      });
+    }
   return [...entries.values()];
 }
 function cachedCatalog(value: any, hotel: string): CatalogResult {
   if (
-    value?.version !== 1 ||
+    ![1, 2].includes(value?.version) ||
     value.hotel !== hotel ||
     !Number.isFinite(Date.parse(value.updated)) ||
     !Array.isArray(value.entries)
   )
     throw new Error(messageRef('errors.invalidFurnitureCache'));
-  const entries = parseFurniData({
-    roomitemtypes: {
-      furnitype: value.entries.map((r: FurniInfo) => ({
+  if (
+    value.entries.some(
+      (entry: FurniInfo) =>
+        entry.placement !== undefined &&
+        !['floor', 'wall'].includes(entry.placement),
+    )
+  )
+    throw new Error(messageRef('errors.invalidFurnitureCache'));
+  const rows = (placement: 'floor' | 'wall') =>
+    value.entries
+      .filter((r: FurniInfo) => (r?.placement ?? 'floor') === placement)
+      .map((r: FurniInfo) => ({
         id: r?.kind,
         name: r?.name,
         classname: r?.identifier,
         description: r?.description,
-      })),
-    },
+      }));
+  const entries = parseFurniData({
+    roomitemtypes: { furnitype: rows('floor') },
+    wallitemtypes: { furnitype: rows('wall') },
   });
   return { hotel, updated: value.updated, entries, source: 'cache' };
 }
@@ -111,16 +135,22 @@ export class FurniCatalog {
       `${hotelDomain(hotel)!.replaceAll('.', '_')}.json`,
     );
     let cached: CatalogResult | undefined;
+    let upgrade = false;
     try {
-      if ((await fs.stat(file)).size <= MAX_BYTES)
-        cached = cachedCatalog(
-          JSON.parse(await fs.readFile(file, 'utf8')),
-          hotel,
-        );
+      if ((await fs.stat(file)).size <= MAX_BYTES) {
+        const value = JSON.parse(await fs.readFile(file, 'utf8'));
+        cached = cachedCatalog(value, hotel);
+        upgrade = value.version === 1;
+      }
     } catch {
       /* A missing or damaged cache never prevents a fresh download. */
     }
-    if (cached && !force && Date.now() - Date.parse(cached.updated) < TTL)
+    if (
+      cached &&
+      !force &&
+      !upgrade &&
+      Date.now() - Date.parse(cached.updated) < TTL
+    )
       return cached;
     if (cached) onCache?.(cached);
     const abort = new AbortController();
@@ -174,7 +204,7 @@ export class FurniCatalog {
         await fs.writeFile(
           temporary,
           JSON.stringify({
-            version: 1,
+            version: 2,
             hotel,
             updated: result.updated,
             entries,

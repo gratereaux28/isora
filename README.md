@@ -7,10 +7,12 @@ A compact desktop companion for **Habbo Flash/Nitro**, built with Electron and E
 ## Features
 
 - Session controls, anti-AFK, movement options and chat filters.
+- Optional desktop notifications for whispers, messenger messages and friends joining your current room, including while Isora runs in the background.
 - Live chat log with search, export and automatic scrolling.
 - Room users and visitors, profile actions and local profile search history.
+- Profile searches check the hotel's public API first. Private profiles open inside Isora using the available public information, without requesting or opening a game profile. The buttons below the profile open Habbo, its website or HabboWidgets explicitly. Public profiles can additionally receive game details; hidden or missing fields remain unavailable.
 - Furniture names, search and a temporary local highlight to help you find an item.
-- Saved outfits and an inventory viewer.
+- Saved outfits and an inventory viewer with floor and wall furniture names and name search.
 - Packet viewer, message map and packet composer.
 - English and Spanish, with a layout that adapts to smaller windows.
 
@@ -51,7 +53,11 @@ The manual folder layout is not a single EXE for G-Earth's file picker or a publ
 
 Settings, outfits and searched profiles are saved locally. Visitors are kept only for the current room and cleared when you change rooms, leave or disconnect.
 
+Enable each desktop alert in **General → Notifications**. Friend entry alerts use the session's friends list; if it has not arrived, use **Load friends** in that section. Friends already present when a room loads do not trigger entry alerts. Clicking a desktop notification shows Isora. System notification settings apply.
+
 Translations live in separate files: `src/locales/en.json` and `src/locales/es.json`. Both use the same English message keys, such as `navigation.room`. Add or edit text in the corresponding language file; keep keys and placeholders identical in both files.
+
+The language picker shows Spain and UK flags, with a globe for automatic selection.
 
 ## Development
 
@@ -65,8 +71,13 @@ npm start
 ```sh
 npm run typecheck
 npm run lint
+npm test
 npm run make
 ```
+
+Builds are written to `out/make/`. Only the standalone installer and portable ZIP are built; no G-Earth-specific ZIP is generated. After packaging, run `npm run test:ui`, `npm run test:package` and `npm run test:extension` / `npm run test:extension-ui` for Electron checks. Run `npm run screenshot` to refresh the English screenshot with an isolated app profile.
+
+For public-profile HTTP checks, start `postman simulation run postman/simulations/profiles/profiles.sim.yaml --port auto --no-history` and run `npm run test:profiles-simulation -- http://localhost:PORT/profiles` using its printed port. The mock and its limits are documented in the adjacent context file. Private-profile handling was informed by [PrivateProfileFixer](https://github.com/WiredSpast/PrivateProfileFixer).
 
 ## License
 
