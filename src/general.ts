@@ -53,6 +53,7 @@ export class General {
   private realRights = false;
   private fakeRights = false;
   private sessionGeneration = 0;
+  private selfInfoRequested = false;
   constructor(private model: Model) {}
   private get s() {
     return this.model.state.settings;
@@ -145,6 +146,7 @@ export class General {
   syncHeartbeat() {
     const active =
       this.model.earth.gameConnected &&
+      !!(this.model.state.self || this.model.state.room.id) &&
       (this.s.antiIdle || this.s.antiIdleOut) &&
       this.has('out', ['Expression', 'AvatarExpression']);
     if (!active) {
@@ -182,18 +184,17 @@ export class General {
   }
   sessionStarted() {
     this.sessionGeneration++;
+    this.selfInfoRequested = false;
     this.friends.clear();
     this.friendParts.clear();
     this.state.friends = 0;
     this.state.friendsLoaded = false;
     this.syncHeartbeat();
-    this.later(() => {
-      if (this.has('out', ['InfoRetrieve'])) this.out(['InfoRetrieve']);
-    });
   }
   sessionEnded() {
     this.friendRequestUntil = 0;
     this.sessionGeneration++;
+    this.selfInfoRequested = false;
     this.stopHeartbeat();
     this.resetRoom();
     this.friends.clear();
@@ -558,6 +559,21 @@ export class General {
       }
       return;
     }
+    // G-Earth reports the socket connection before Habbo authenticates.
+    // Only start automatic requests after the server confirms player/room data.
+    if (['userobject', 'userdata', 'roomready'].includes(name))
+      this.syncHeartbeat();
+    if (name === 'roomready' && this.model.state.room.id)
+      this.later(() => {
+        if (
+          !this.model.state.self &&
+          !this.selfInfoRequested &&
+          this.has('out', ['InfoRetrieve'])
+        ) {
+          this.out(['InfoRetrieve']);
+          this.selfInfoRequested = true;
+        }
+      });
     if (name === 'friendlistfragment' && this.friendRequestUntil > Date.now())
       p.blocked = true;
     if (name === 'friendlistfragment' || name === 'friendlistupdate')

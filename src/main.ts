@@ -27,8 +27,8 @@ import type { Outfit, Settings, DesktopNotice } from './shared';
 import { readGEarthLaunch } from './gearth-launch';
 
 if (started) app.quit();
-if (process.platform === 'win32')
-  app.setAppUserModelId('com.squirrel.isora.Isora');
+const windowsAppId = 'com.squirrel.isora.Isora';
+if (process.platform === 'win32') app.setAppUserModelId(windowsAppId);
 if (!app.isPackaged && process.env.ISORA_TEST_DATA)
   app.setPath('userData', process.env.ISORA_TEST_DATA);
 let window: BrowserWindow | null = null;
@@ -47,6 +47,11 @@ function showWindow() {
   window?.focus();
 }
 function createWindow() {
+  const icon = path.join(
+    app.isPackaged ? process.resourcesPath : app.getAppPath(),
+    'assets',
+    process.platform === 'win32' ? 'isora.ico' : 'isora.png',
+  );
   window = new BrowserWindow({
     width: 1280,
     height: 840,
@@ -54,11 +59,7 @@ function createWindow() {
     minHeight: 480,
     backgroundColor: '#101116',
     title: 'Isora',
-    icon: path.join(
-      app.isPackaged ? process.resourcesPath : app.getAppPath(),
-      'assets',
-      process.platform === 'win32' ? 'isora.ico' : 'isora.png',
-    ),
+    icon,
     show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -67,6 +68,12 @@ function createWindow() {
       sandbox: true,
     },
   });
+  if (process.platform === 'win32')
+    window.setAppDetails({
+      appId: windowsAppId,
+      appIconPath: icon,
+      appIconIndex: 0,
+    });
   Menu.setApplicationMenu(null);
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   window.webContents.on('will-navigate', (event) => event.preventDefault());
